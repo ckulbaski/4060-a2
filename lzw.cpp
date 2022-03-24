@@ -24,30 +24,59 @@ public:
     }
 
     void init_dictionary(){
-        dict = (string*)malloc(size * sizeof(string));
-        for(int i = 0; i < 256; i++){
-            dict[i] = (unsigned char)i;
+        dict = new string[size];
+        for(int i = 0; i < size; i++){
+            if(i < 256){
+                dict[i] = (char)i;
+            }
+            else dict[i] = "";
         }
     }
 
-    string get(){
-        return "";
+    string get(string p){
+        return p;
     }
 
     bool put(string s){
+        /*
         if(next_open == size){
             if(size == MAX_SIZE){
                 return false; //full
             }
-            size = 2*size;
-            string* realloc_array = (string*)realloc(dict, size * sizeof(string));
-            if(realloc_array){
-                dict = realloc_array;
-            }
-            else return false;
+            expand_dictionary(dict);
         }
         dict[next_open++] = s;
+        */
+        s = s + " ";
+        expand_dictionary(dict);
         return true;
+    }
+
+    void print(){
+        for(int i = 0; i < size; i++){
+            cout << "[" << i << "]: " << dict[i] << "\n";
+        }
+    }
+
+private: 
+    
+    void expand_dictionary(string* src){
+        cout << "Hello\n";
+        size = 2*size;
+        string* new_arr = new string[size];
+        if(new_arr){
+            cout << "New array "<< size << endl;
+        }
+        for(int i = 0; i < size; i++){
+            if( i < size/2){
+                new_arr[i] = src[i];
+            }
+            else{
+                new_arr[i] = "";
+            }
+        }
+        cout << "Copied array\n";
+        src = new_arr;
     }
 
 };
@@ -92,12 +121,17 @@ void compress(char* in_filename, char* out_filename){
     FILE *in = fopen(in_filename, "rb");
     FILE *out = fopen(out_filename, "wb");
 
+    Dictionary dict = Dictionary();
+    dict.print();
+    dict.put("z");
+    dict.print();
+/*
     string p;
     char c;
     fread(&c, 1, 1, in);
     p = c; 
     while(fread(&c, 1, 1, in)){
-        if( get(p+c) ){
+        if( dict.get(p+c) ){
             p = p+c;
         }
         else{
@@ -106,7 +140,7 @@ void compress(char* in_filename, char* out_filename){
             // p = ch
         }
     }
-
+*/
     // output index for p
     fclose(in);
     fclose(out);
