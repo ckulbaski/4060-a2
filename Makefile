@@ -3,9 +3,9 @@ CFLAGS = -Wall -Wextra -Werror
 
 main: A2Q1_Kulbaski_C A2Q2_Kulbaski_C
 
-A1Q1_Kulbaski_C: lzw.cpp
-	$(CC) $(CFLAGS) lzw -o A2Q1_Kulbaski_C   
-A1Q2_Kulbaski_C: bwt.cpp
+A2Q1_Kulbaski_C: lzw.cpp
+	$(CC) $(CFLAGS) lzw.cpp -o A2Q1_Kulbaski_C   
+A2Q2_Kulbaski_C: bwt.cpp
 	$(CC) $(CFLAGS) bwt.cpp -o A2Q2_Kulbaski_C   
 
 clean: 
