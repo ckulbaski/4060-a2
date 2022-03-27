@@ -2,7 +2,7 @@
 #include <iostream>
 #include <string>
 #include <cmath>
-#include "BitFile.hpp"
+#include <map>
 
 #define DICT_SIZE 512
 #define MAX_SIZE 4096
@@ -25,12 +25,12 @@ public:
 
     void init_dictionary(){
         dict = new string[size];
-        uint8_t i;
-        for(i = 0; i < 255; i++){
-            dict[i] = (char)i;
+        int i;
+        for(i = 0; i < 256; i++){
+            string s = "";
+            s += char(i);
+            dict[i] = s;
         }
-        i = 255;
-        dict[255] = (char)i;
         next_open = 256;
     }
 
@@ -38,7 +38,7 @@ public:
     uint32_t find(string p){
         for( int i = 0; i < next_open; i++){
             if(dict[i] == p){
-                cout << "Symbol [" << i << "] is " << p << endl;
+                //cout << "Symbol [" << i << "] is " << p << endl;
                 return (uint32_t)i;
             }
         }
@@ -46,10 +46,17 @@ public:
     }
 
     string get(uint32_t index){
+        /*
+        if(dict[index] == ""){
+            cout << "npos" << endl;
+        }
+        else cout << " " << dict[index];
+        */
         return dict[index];
     }
 
     bool put(string s){
+       
         
         if(next_open == size){
             if(size == MAX_SIZE){
@@ -59,6 +66,7 @@ public:
         }
         dict[next_open++] = s;
         return true;
+        
     }
 
     void print(){
@@ -68,7 +76,8 @@ public:
             if(dict[i] == ""){
                 cout << "npos";
             } 
-            else cout << dict[i] << "\n";
+            else cout << dict[i];
+            cout << endl;
         }
     }
 
@@ -79,7 +88,6 @@ public:
 private: 
     
     void expand_dictionary(){
-        cout << "Hello\n";
         size = 2*size;
         string* new_arr = new string[size];
         if(new_arr){
@@ -99,53 +107,41 @@ private:
 
 };
 
-//the following 2 writeBit(s) functions were adapted from Ben Li's "BitFile.cpp" 
-//interface to work with my program
+
 uint8_t buf = 0;
-int pos = 0; //indicates while bit is to be filled on next bit write. Value is between 0 and 7.
-void writeBit(uint8_t bitval, FILE* out) {
+int buf_index = 0; 
+void write_bits( uint32_t bits, int count, FILE* out) {
 
-    if (bitval == 1){
-        bitval = bitval << pos;
-        buf = buf | bitval;        
-    }    
+    //cout << "Writing " << count << " bits of " << bits << endl;
 
-    if (pos == BIT_END) {
-        fwrite(&buf, 1,1, out);
-        pos = 0;
-        buf = 0;    
+    uint32_t i = 0x0001;
+    for(i = i << (count-1); i >= 0x0001; i = i >> 1){
+        
+        if(buf_index == 8){
+            fwrite(&buf, 1, 1, out);
+            buf_index = 0;
+        }
+
+        buf = buf << 1;
+        
+        if(bits & i){
+            buf = buf | 1;
+            //cout << "1";
+        }
+        //else { cout << "0"; }
+
+        buf_index ++ ;
+
     }
-    else {
-        pos++;
-    }
+
+    //cout << endl;
 }
 
-void writeBits( uint32_t bits, int count, FILE* out) {
+void flush_out(FILE* out) {
 
-    int i;
-    cout << "writing ";
-    for (i = 0; i < count;i++) {
-        if (bits & 0x80) {
-            cout << "1";
-            writeBit(1, out);
-        }
-        else {
-            cout << "0";
-            writeBit(0, out);
-        }
-        bits = bits << 1;
-    }
-    cout << endl;
-}
+    buf = buf << (8 - buf_index);
+    fwrite(&buf, 1,1,out);
 
-void writeFlush(FILE* out) {
-
-    if (pos > 0) {
-        fwrite(&buf, 1,1,out);
-
-    }    
-    pos = 0;
-    buf = 0;
     fflush(out);
 }
 
@@ -188,38 +184,43 @@ int validate_args(int argc, char **argv){
 void compress(char* in_filename, char* out_filename){
     FILE *in = fopen(in_filename, "rb");
     FILE *out = fopen(out_filename, "wb");
+    if(!in){
+        cout << "Could not find "<< in_filename << endl;
+        return;
+    }
+    if(!out){
+        cout << "Could not find "<< out_filename << endl;
+        return;
+    }
 
     Dictionary dict = Dictionary();
 
-
-    string p;
+    string p = "";
     char c;
     fread(&c, 1, 1, in);
-    p = c; 
+    p += c;
     while(fread(&c, 1, 1, in)){
-
         int index = dict.find(p+c);
         if( index >= 0 ){
             p = p+c;
-            //output index
         }
         else{
             uint32_t index = dict.find(p);
             int len = (int)log2(dict.get_size());
-            cout << "Writing " << len << " bits of " << index << endl;
-            writeBits(index, len, out);
-            string p_c = p+c;
-            dict.put(p_c);
+            write_bits(index, len, out);
+            dict.put(p+c);
             p = c;
         }
     }
 
     uint32_t index = dict.find(p);
     int len = (int)log2(dict.get_size());
-    cout << "Writing " << len << " bits of " << index << endl;
-    writeBits(index, len, out);
+    //cout << "Writing " << len << " bits of " << index << endl;
+    write_bits(index, len, out);
 
-    writeFlush(out);
+    flush_out(out);
+
+    dict.print();
 
     cout << "Compressed file to " << out_filename << endl;
     fclose(in);
@@ -228,51 +229,78 @@ void compress(char* in_filename, char* out_filename){
 }
 
 
-// this function was also taken from Ben Li's BitFile interface 
+// this function was taken from Ben Li's BitFile interface 
 // to work with my program. 
-uint8_t readBit(FILE* in) { //returns either 0x00 or 0x01 , unless something goes wrong which returns -1.
-    uint8_t bitval=0;
-    int cnt;
+uint8_t read_buf = 0;
+int read_buf_index = 8;
+uint8_t read_bit(FILE* in) { //returns either 0x00 or 0x01 , unless something goes wrong which returns -1.
 
-    if (pos == 0) {
+    int cnt; 
+    uint8_t bitval=0;
+
+    if(read_buf_index == 8){
         cnt = fread(&buf,1,1,in);
+        read_buf_index = 0;
         if (cnt !=1) {
             return 2;  //to denote something went wrong
         }
     }
-    bitval = buf & 0x01; //get bit value
 
-    buf = buf >> 1; //move to next bit
-    //update position
-    if (pos == BIT_END) {
-        pos = 0;
-    } 
-    else {
-        pos = pos + 1;
+    uint8_t bitmask = 0x80 >> (read_buf_index);
+    if(buf & bitmask) {
+        bitval = 1;
     }
-
+    else {
+        bitval = 0;
+    }
+    read_buf_index++;
     return bitval;
+
+
 }
 
 uint32_t get_next_index(FILE* in, int len){
     uint32_t index = 0; 
 
+    cout << "Next "<<len<<"-bit index: ";
     for(int i = 0; i < len; i++){
-        uint8_t bit = readBit(in);
-        if(bit == 2){
-            return 0x8000;
+        uint8_t bit = read_bit(in);
+        if(bit == 2){ // error
+            cout << "EOF" << endl;
+            return 0x8888;
         } 
         index = index << 1;
         if(bit == 1){
             index = index | 0x01;
+            cout << "1";
         }
+        else { cout << "0"; }
     }
+    cout << endl;
     return index;
+}
+
+void write_string(string s, FILE* out){
+    
+    long unsigned int i;
+    for(i = 0; i < s.size(); i++){
+        fwrite(&s[i], 1, 1, out);
+    }
+
 }
 
 void decompress(char* in_filename, char* out_filename){
     FILE *in = fopen(in_filename, "rb");
     FILE *out = fopen(out_filename, "wb");
+
+    if(!in){
+        cout << "Could not find "<< in_filename << endl;
+        return;
+    }
+    if(!out){
+        cout << "Could not find "<< out_filename << endl;
+        return;
+    }
     
     Dictionary dict = Dictionary();
 
@@ -281,31 +309,32 @@ void decompress(char* in_filename, char* out_filename){
     //get first index
     int index_length = (int)log2(dict.get_size());
     uint32_t old_index = get_next_index(in, index_length);
-    cout << "First index is " << old_index << " and has " << index_length << " bits" << endl; 
     string old_str = dict.get(old_index);
-    cout << "Found string" << old_str << endl;
-    fwrite(&old_str, 1, old_str.size(), out);
 
-    while(old_index > 0){
+    write_string(old_str, out);
+
+    while(old_index < 0x8888){
         uint32_t new_index  = get_next_index(in, index_length); 
-        if(new_index == 0x8000){
+        if(new_index == 0x8888){
+            cout << "EOF" << endl;
             break;
         }
         string str = dict.get(new_index);
         if(str == ""){
+            cout << "dict[" << new_index << "] is empty" << endl;
             str = dict.get(old_index);
             str = str + str.front();
         }
-        fwrite(&str, 1, str.size(), out);
+        write_string(str, out);
         char ch = str.front();
-        dict.put(old_str += ch);
+        dict.put(old_str + ch);
         old_index = new_index;
         old_str = dict.get(old_index);
 
         index_length = (int)log2(dict.get_size());
     }
 
-    cout << "Deompressed file to " << out_filename << endl;
+    cout << "Decompressed file to " << out_filename << endl;
     fclose(in);
     fclose(out);
     
@@ -328,6 +357,6 @@ int main(int argc, char **argv){
     }
 
     return EXIT_SUCCESS;
-    
+ 
 }
 
